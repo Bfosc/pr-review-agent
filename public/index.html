@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PR Review Agent</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><rect x='2' y='2' width='24' height='24' rx='6' fill='%23111' stroke='%236366f1' stroke-width='2'/><path d='M8 14h12M14 8v12' stroke='%23818cf8' stroke-width='2' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-900: #06080d;
+  --bg-800: #0c0f16;
+  --bg-700: #111621;
+  --bg-600: #171d2b;
+  --bg-500: #1e2638;
+  --bg-400: #263045;
+
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.12);
+  --border-active: rgba(99,102,241,0.4);
+
+  --text-100: #f1f5f9;
+  --text-200: #e2e8f0;
+  --text-300: #cbd5e1;
+  --text-400: #94a3b8;
+  --text-500: #64748b;
+
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-glow: rgba(99,102,241,0.15);
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --cyan: #22d3ee;
+
+  --font: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", monospace;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.3);
+  --shadow-glow: 0 0 40px rgba(99,102,241,0.15);
+
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--bg-900);
+  color: var(--text-200);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 60%, rgba(34,211,238,0.04), transparent);
+  background-attachment: fixed;
+}
+
+a { color: var(--accent-hover); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0 2rem;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(6,8,13,0.8);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 15px; color: var(--text-100);
+  cursor: pointer; user-select: none;
+}
+.nav-logo svg { width: 28px; height: 28px; }
+.nav-logo span.badge {
+  font-size: 9px; padding: 2px 7px; border-radius: 99px;
+  background: var(--accent-glow); color: var(--accent-hover);
+  border: 1px solid rgba(99,102,241,0.3);
+  letter-spacing: 0.08em; font-weight: 600;
+}
+.nav-links { display: flex; align-items: center; gap: 6px; }
+.nav-link {
+  padding: 6px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--text-400);
+  cursor: pointer; transition: all var(--transition);
+  border: none; background: none;
+  font-family: var(--font);
+}
+.nav-link:hover { color: var(--text-200); background: rgba(255,255,255,0.05); }
+.nav-link.active {
+  color: var(--text-100); background: rgba(99,102,241,0.12);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.nav-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--text-500);
+}
+.nav-status .dot-sm {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.dot-sm.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-sm.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE SYSTEM
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.page { display: none; padding-top: 60px; min-height: 100vh; }
+.page.active { display: block; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE: LANDING
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.hero {
+  text-align: center;
+  padding: 7rem 0 5rem;
+  position: relative;
+}
+.hero::before {
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(99,102,241,0.12) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.hero > * { position: relative; z-index: 1; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 16px; border-radius: 99px;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.25);
+  font-size: 12px; font-weight: 600; color: var(--accent-hover);
+  letter-spacing: 0.05em;
+  margin-bottom: 1.8rem;
+  backdrop-filter: blur(8px);
+}
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 800; line-height: 1.12;
+  margin-bottom: 1.4rem;
+  letter-spacing: -0.03em;
+}
+.hero h1 .gradient {
+  background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa, #22d3ee, #818cf8);
+  background-size: 300% 300%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradShift 6s ease infinite;
+  filter: drop-shadow(0 0 30px rgba(99,102,241,0.2));
+}
+@keyframes gradShift {
+  0%,100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.hero p {
+  font-size: 18px; color: var(--text-400);
+  max-width: 580px; margin: 0 auto 2.8rem;
+  line-height: 1.75;
+}
+.hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 24px; border-radius: var(--radius);
+  font-family: var(--font); font-size: 14px; font-weight: 600;
+  cursor: pointer; border: none; transition: all var(--transition);
+  letter-spacing: 0.01em;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+  color: #fff;
+  box-shadow: 0 2px 15px rgba(99,102,241,0.3);
+}
+.btn-primary:hover { background: linear-gradient(135deg, #818cf8, #a78bfa); transform: translateY(-1px); box-shadow: 0 4px 25px rgba(99,102,241,0.45); }
+.btn-secondary {
+  background: rgba(255,255,255,0.06); color: var(--text-300);
+  border: 1px solid var(--border-hover);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.1); color: var(--text-100); }
+.btn-sm { padding: 7px 16px; font-size: 12px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+/* Features */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  padding: 2rem 0 4rem;
+}
+.feature-card {
+  background: linear-gradient(135deg, var(--bg-700), var(--bg-600));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 30px 26px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative; overflow: hidden;
+}
+.feature-card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0; transition: opacity 0.3s;
+}
+.feature-card::after {
+  content: ""; position: absolute; inset: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(99,102,241,0.06), transparent 60%);
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+}
+.feature-card:hover { border-color: rgba(99,102,241,0.25); transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.feature-card:hover::before { opacity: 1; }
+.feature-card:hover::after { opacity: 1; }
+.feature-icon {
+  width: 44px; height: 44px; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 16px;
+}
+.feature-icon.purple { background: rgba(99,102,241,0.15); }
+.feature-icon.green  { background: rgba(34,197,94,0.15); }
+.feature-icon.amber  { background: rgba(245,158,11,0.15); }
+.feature-icon.cyan   { background: rgba(34,211,238,0.15); }
+.feature-card h3 {
+  font-size: 15px; font-weight: 700; color: var(--text-100);
+  margin-bottom: 8px;
+}
+.feature-card p { font-size: 13px; color: var(--text-400); line-height: 1.65; }
+
+/* How it works */
+.how-section {
+  padding: 3rem 0 5rem;
+  text-align: center;
+}
+.how-section h2 {
+  font-size: 22px; font-weight: 700; color: var(--text-100);
+  margin-bottom: 2.5rem;
+}
+.how-steps {
+  display: flex; gap: 0; justify-content: center; flex-wrap: wrap;
+}
+.how-step {
+  flex: 1; min-width: 180px; max-width: 240px;
+  padding: 0 20px;
+  position: relative;
+}
+.how-step:not(:last-child)::after {
+  content: "→";
+  position: absolute; right: -8px; top: 24px;
+  font-size: 20px; color: var(--text-500);
+}
+.step-num {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-600), var(--bg-500));
+  border: 2px solid rgba(99,102,241,0.25);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+  font-size: 18px; font-weight: 700; color: var(--accent-hover);
+  box-shadow: 0 0 20px rgba(99,102,241,0.1);
+}
+.how-step h4 { font-size: 14px; font-weight: 600; color: var(--text-200); margin-bottom: 6px; }
+.how-step p { font-size: 12px; color: var(--text-500); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE: REVIEW
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.review-page { padding-top: 80px; padding-bottom: 3rem; }
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed var(--border-hover);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--bg-800), var(--bg-700));
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  box-shadow: 0 0 30px rgba(99,102,241,0.1);
+}
+.upload-zone.dragover { border-style: solid; }
+.upload-icon {
+  font-size: 36px; margin-bottom: 12px;
+  opacity: 0.6;
+}
+.upload-zone h3 {
+  font-size: 15px; font-weight: 600; color: var(--text-200);
+  margin-bottom: 6px;
+}
+.upload-zone p { font-size: 12px; color: var(--text-500); }
+.upload-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+}
+
+/* File list */
+.file-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 14px;
+  min-height: 0;
+}
+.file-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 99px;
+  background: var(--bg-500); border: 1px solid var(--border);
+  font-size: 11px; font-family: var(--mono); color: var(--text-300);
+}
+.file-chip .remove {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(239,68,68,0.2); color: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; cursor: pointer; line-height: 1;
+  border: none; font-family: var(--font);
+}
+.file-chip .remove:hover { background: rgba(239,68,68,0.4); }
+
+/* Divider */
+.section-divider {
+  display: flex; align-items: center; gap: 14px;
+  margin: 1.5rem 0;
+  font-size: 11px; color: var(--text-500); letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 600;
+}
+.section-divider::before, .section-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+
+/* Code input */
+.code-editor {
+  background: linear-gradient(180deg, var(--bg-700), var(--bg-800));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg-600);
+  border-bottom: 1px solid var(--border);
+}
+.editor-header span { font-size: 11px; color: var(--text-500); font-weight: 600; letter-spacing: 0.05em; }
+.editor-header .dots { display: flex; gap: 5px; }
+.editor-header .dots i {
+  width: 8px; height: 8px; border-radius: 50%; display: block;
+}
+.editor-header .dots i:nth-child(1) { background: #ef4444; }
+.editor-header .dots i:nth-child(2) { background: #f59e0b; }
+.editor-header .dots i:nth-child(3) { background: #22c55e; }
+.code-textarea {
+  width: 100%; min-height: 180px; height: 220px;
+  background: transparent; border: none; outline: none;
+  padding: 14px; resize: vertical;
+  font-family: var(--mono); font-size: 12.5px;
+  color: var(--text-200); line-height: 1.7;
+}
+
+/* Review controls */
+.review-controls {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.step-info {
+  font-size: 12px; color: var(--accent-hover);
+  margin-left: auto;
+}
+
+/* Agent grid */
+.agents-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-top: 1.5rem;
+}
+@media (max-width: 700px) { .agents-grid { grid-template-columns: 1fr; } }
+
+.agent-card {
+  background: linear-gradient(180deg, var(--bg-700), var(--bg-600));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  min-height: 180px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.agent-card.active { border-color: var(--amber); box-shadow: 0 0 25px rgba(245,158,11,0.1), inset 0 0 20px rgba(245,158,11,0.02); }
+.agent-card.done { border-color: rgba(34,197,94,0.3); box-shadow: 0 0 20px rgba(34,197,94,0.06); }
+.agent-card.error { border-color: rgba(239,68,68,0.3); box-shadow: 0 0 20px rgba(239,68,68,0.06); }
+
+.agent-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.agent-icon { font-size: 16px; }
+.agent-name {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-400); flex: 1;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--bg-400); transition: all var(--transition);
+}
+.status-dot.thinking { background: var(--amber); animation: pulse 1s infinite; box-shadow: 0 0 8px var(--amber); }
+.status-dot.done { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.agent-output {
+  font-size: 11.5px; line-height: 1.7; color: var(--text-400);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 250px; overflow-y: auto;
+}
+.agent-output.error-text { color: var(--red); }
+
+/* Orchestrator */
+.orchestrator {
+  background: linear-gradient(135deg, var(--bg-700), var(--bg-600));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 26px;
+  margin-top: 16px;
+  min-height: 120px;
+  position: relative; overflow: hidden;
+}
+.orchestrator::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--accent));
+  opacity: 0.6;
+}
+.orch-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 18px;
+}
+.orch-header span { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-400); }
+
+/* Score row */
+.score-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.score-card {
+  flex: 1; min-width: 80px; text-align: center;
+  padding: 16px 8px;
+  background: linear-gradient(180deg, var(--bg-600), var(--bg-500));
+  border-radius: var(--radius); border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+.score-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
+.score-card.overall {
+  border-color: rgba(99,102,241,0.3);
+  background: linear-gradient(180deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02));
+  box-shadow: 0 0 20px rgba(99,102,241,0.08);
+}
+.score-num { font-size: 28px; font-weight: 800; font-family: var(--mono); }
+.score-lbl { font-size: 10px; color: var(--text-500); margin-top: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* Issues */
+.issues-title {
+  font-size: 12px; color: var(--text-400); margin-bottom: 10px;
+  font-weight: 600; letter-spacing: 0.05em;
+}
+.issue-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  margin-bottom: 8px; font-size: 12.5px; line-height: 1.55;
+}
+.issue-item.high   { background: rgba(239,68,68,0.08);  border: 1px solid rgba(239,68,68,0.2); }
+.issue-item.medium { background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); }
+.issue-item.low    { background: rgba(34,197,94,0.05);  border: 1px solid rgba(34,197,94,0.2); }
+.sev-badge {
+  font-size: 9px; font-weight: 700; padding: 2px 7px;
+  border-radius: 4px; white-space: nowrap; letter-spacing: 0.08em;
+  flex-shrink: 0; margin-top: 2px;
+}
+.high   .sev-badge { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.medium .sev-badge { background: rgba(245,158,11,0.15); color: #fcd34d; }
+.low    .sev-badge { background: rgba(34,197,94,0.15); color: #86efac; }
+.issue-text { flex: 1; color: var(--text-300); }
+.agent-tag { font-size: 10px; flex-shrink: 0; margin-top: 3px; opacity: 0.6; }
+
+/* Summary */
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+.summary-box {
+  font-size: 13.5px; line-height: 1.8; color: var(--text-200);
+  padding: 16px 18px; background: var(--bg-600);
+  border-radius: var(--radius); white-space: pre-wrap;
+}
+.suggestion-box {
+  font-size: 13px; line-height: 1.7;
+  color: #93c5fd; padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  margin-top: 12px;
+  background: linear-gradient(90deg, rgba(99,102,241,0.08), transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.empty-hint { font-size: 12px; color: var(--text-500); font-style: italic; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE: SETTINGS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.settings-page { padding-top: 80px; padding-bottom: 3rem; }
+.settings-page h2 {
+  font-size: 22px; font-weight: 700; color: var(--text-100);
+  margin-bottom: 8px;
+}
+.settings-page .subtitle { font-size: 13px; color: var(--text-500); margin-bottom: 2rem; }
+
+.settings-card {
+  background: linear-gradient(135deg, var(--bg-700), var(--bg-600));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin-bottom: 16px;
+  transition: border-color 0.3s;
+}
+.settings-card:focus-within { border-color: rgba(99,102,241,0.25); }
+.settings-card h3 {
+  font-size: 14px; font-weight: 700; color: var(--text-200);
+  margin-bottom: 4px;
+}
+.settings-card .desc { font-size: 12px; color: var(--text-500); margin-bottom: 20px; }
+
+.form-group { margin-bottom: 18px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-300); margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+.form-hint { font-size: 11px; color: var(--text-500); margin-top: 4px; }
+.form-input {
+  width: 100%; padding: 10px 14px;
+  background: var(--bg-600); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono); font-size: 13px;
+  color: var(--text-200); outline: none;
+  transition: border-color var(--transition);
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-500); }
+select.form-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+select.form-input option { background: var(--bg-600); color: var(--text-200); }
+select.form-input optgroup { background: var(--bg-500); color: var(--accent-hover); font-weight: 700; }
+.form-row { display: flex; gap: 14px; }
+.form-row .form-group { flex: 1; }
+
+.input-with-toggle {
+  position: relative; display: flex;
+}
+.input-with-toggle .form-input { padding-right: 42px; flex: 1; }
+.toggle-vis {
+  position: absolute; right: 2px; top: 2px; bottom: 2px;
+  width: 36px; border-radius: 6px;
+  background: var(--bg-500); border: none;
+  color: var(--text-500); cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.toggle-vis:hover { color: var(--text-300); }
+
+.settings-actions {
+  display: flex; gap: 10px; align-items: center;
+  margin-top: 24px;
+}
+.settings-msg {
+  font-size: 12px; margin-left: 8px;
+}
+.settings-msg.ok { color: var(--green); }
+.settings-msg.err { color: var(--red); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.footer {
+  text-align: center; padding: 2rem 0;
+  font-size: 11px; color: var(--text-500);
+  border-top: 1px solid var(--border);
+  margin-top: 2rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+  .nav { padding: 0 1rem; }
+  .nav-link { padding: 6px 10px; font-size: 12px; }
+  .nav-status { display: none; }
+  .hero { padding: 3rem 0 2rem; }
+  .hero h1 { font-size: 1.8rem; }
+  .features { grid-template-columns: 1fr; }
+  .how-steps { flex-direction: column; align-items: center; }
+  .how-step:not(:last-child)::after { display: none; }
+  .form-row { flex-direction: column; gap: 0; }
+  .score-row { gap: 6px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<nav class="nav">
+  <div class="nav-logo" onclick="navigate('landing')">
+    <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="#6366f1" stroke-width="2"/><path d="M8 14h12M14 8v12" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/></svg>
+    PR Review Agent
+    <span class="badge">AI</span>
+  </div>
+  <div class="nav-links">
+    <button class="nav-link" data-page="landing" onclick="navigate('landing')">首页</button>
+    <button class="nav-link" data-page="review" onclick="navigate('review')">代码审查</button>
+    <button class="nav-link" data-page="settings" onclick="navigate('settings')">⚙ 设置</button>
+  </div>
+  <div class="nav-status">
+    <div class="dot-sm" id="nav-dot"></div>
+    <span id="nav-status-text">检测中...</span>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PAGE: LANDING
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="page active" id="page-landing">
+  <div class="container">
+
+    <div class="hero">
+      <div class="hero-badge">⚡ Multi-Agent Architecture</div>
+      <h1>AI 驱动的<br><span class="gradient">代码审查系统</span></h1>
+      <p>三路 AI Agent 并行分析代码安全性、规范性和逻辑正确性，由 Orchestrator 综合输出结构化审查报告。</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="navigate('review')">🚀 开始审查</button>
+        <button class="btn btn-secondary" onclick="navigate('settings')">⚙ 配置 API Key</button>
+      </div>
+    </div>
+
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-icon purple">🔒</div>
+        <h3>安全审查</h3>
+        <p>检测 SQL 注入、XSS、敏感信息泄露、不安全加密等安全漏洞，覆盖 OWASP Top 10。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon green">📐</div>
+        <h3>规范审查</h3>
+        <p>检查命名规范、代码结构、注释质量、可读性与 DRY 原则，提升代码可维护性。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon amber">🧠</div>
+        <h3>逻辑审查</h3>
+        <p>识别逻辑错误、边界条件、空指针、竞态条件和错误处理缺失等深层问题。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon cyan">⚡</div>
+        <h3>综合报告</h3>
+        <p>Orchestrator 整合三方分析，输出评分、问题列表、摘要和优先修改建议。</p>
+      </div>
+    </div>
+
+    <div class="how-section">
+      <h2>工作流程</h2>
+      <div class="how-steps">
+        <div class="how-step">
+          <div class="step-num">1</div>
+          <h4>输入代码</h4>
+          <p>粘贴代码片段、Git diff 或拖拽文件上传</p>
+        </div>
+        <div class="how-step">
+          <div class="step-num">2</div>
+          <h4>三路并行</h4>
+          <p>安全、规范、逻辑 Agent 同时分析</p>
+        </div>
+        <div class="how-step">
+          <div class="step-num">3</div>
+          <h4>综合输出</h4>
+          <p>Orchestrator 生成评分与结构化报告</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">PR Review Agent · Powered by Claude · Multi-Agent Parallel Architecture</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PAGE: REVIEW
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-review">
+  <div class="container review-page">
+
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" multiple webkitdirectory>
+      <div class="upload-icon">📂</div>
+      <h3>拖拽文件或文件夹到此处</h3>
+      <p>支持多文件上传，自动合并为代码块 · 也可 <strong>点击选择文件</strong></p>
+    </div>
+    <div class="file-list" id="file-list"></div>
+
+    <div class="section-divider">或手动输入代码</div>
+
+    <!-- Code Editor -->
+    <div class="code-editor">
+      <div class="editor-header">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <span>CODE INPUT</span>
+        <button class="btn btn-sm btn-secondary" onclick="loadSample()">载入示例</button>
+      </div>
+      <textarea class="code-textarea" id="code-input" placeholder="粘贴 Git diff 或代码片段..."></textarea>
+    </div>
+
+    <!-- Controls -->
+    <div class="review-controls">
+      <button class="btn btn-primary" id="run-btn" onclick="runReview()">▶ 开始审查</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearAll()">清空</button>
+      <span class="step-info" id="step-info"></span>
+    </div>
+
+    <!-- Agent Cards -->
+    <div class="agents-grid">
+      <div class="agent-card" id="card-security">
+        <div class="agent-header">
+          <span class="agent-icon">🔒</span>
+          <span class="agent-name">Security</span>
+          <div class="status-dot" id="dot-security"></div>
+        </div>
+        <div class="agent-output empty-hint" id="out-security">等待启动...</div>
+      </div>
+      <div class="agent-card" id="card-style">
+        <div class="agent-header">
+          <span class="agent-icon">📐</span>
+          <span class="agent-name">Style</span>
+          <div class="status-dot" id="dot-style"></div>
+        </div>
+        <div class="agent-output empty-hint" id="out-style">等待启动...</div>
+      </div>
+      <div class="agent-card" id="card-logic">
+        <div class="agent-header">
+          <span class="agent-icon">🧠</span>
+          <span class="agent-name">Logic</span>
+          <div class="status-dot" id="dot-logic"></div>
+        </div>
+        <div class="agent-output empty-hint" id="out-logic">等待启动...</div>
+      </div>
+    </div>
+
+    <!-- Orchestrator -->
+    <div class="orchestrator" id="orch-panel">
+      <div class="orch-header">
+        <span>⚡ Orchestrator — 综合分析</span>
+        <div class="status-dot" id="dot-orch"></div>
+      </div>
+      <div class="empty-hint" id="orch-content">三路 Agent 完成后自动综合输出...</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PAGE: SETTINGS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="container settings-page">
+    <h2>⚙ 系统设置</h2>
+    <p class="subtitle">选择 AI 供应商，配置 API 密钥和模型参数。</p>
+
+    <!-- Provider Selector -->
+    <div class="settings-card">
+      <h3>🏢 AI 供应商</h3>
+      <p class="desc">选择供应商后自动填充 API 地址和可用模型，只需填写 API Key。</p>
+      <div class="form-group">
+        <label class="form-label">供应商</label>
+        <select class="form-input" id="set-provider" onchange="onProviderChange()">
+          <option value="">加载中...</option>
+        </select>
+        <div class="form-hint" id="provider-desc"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">模型</label>
+        <select class="form-input" id="set-model">
+          <option value="">先选择供应商</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Base URL</label>
+        <input type="text" class="form-input" id="set-baseUrl" placeholder="自动填充">
+        <div class="form-hint">供应商 API 地址，通常自动填充</div>
+      </div>
+    </div>
+
+    <!-- API Key -->
+    <div class="settings-card">
+      <h3>🔑 API Key</h3>
+      <p class="desc" id="key-desc">填写对应供应商的 API 密钥。</p>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <div class="input-with-toggle">
+          <input type="password" class="form-input" id="set-apiKey" placeholder="sk-ant-api03-...">
+          <button class="toggle-vis" onclick="toggleKeyVis()" title="显示/隐藏">👁</button>
+        </div>
+        <div class="form-hint" id="key-hint">选择供应商后显示获取地址</div>
+      </div>
+    </div>
+
+    <!-- Advanced -->
+    <div class="settings-card">
+      <h3>⚙ 高级参数</h3>
+      <p class="desc">请求参数和超时配置。</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max Tokens</label>
+          <input type="number" class="form-input" id="set-maxTokens" placeholder="1000">
+          <div class="form-hint">每次 API 调用的最大输出 token 数</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">API 超时 (ms)</label>
+          <input type="number" class="form-input" id="set-timeout" placeholder="60000">
+          <div class="form-hint">单次请求最大等待时间</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="settings-actions">
+      <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+      <button class="btn btn-secondary" onclick="testConnection()">🔗 测试连接</button>
+      <button class="btn btn-secondary" onclick="loadSettings()">🔄 重新加载</button>
+      <span class="settings-msg" id="settings-msg"></span>
+    </div>
+
+    <!-- Test result -->
+    <div id="test-result" style="margin-top:12px;display:none" class="settings-card">
+      <h3>连接测试结果</h3>
+      <div id="test-result-content" style="font-size:13px;line-height:1.7;margin-top:10px"></div>
+    </div>
+
+    <div class="footer">设置保存到 .env 文件 · 切换供应商后保存即可生效</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SCRIPTS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+// ─── Sample Code ────────────────────────────────────────────────────────────
+
+const SAMPLE_CODE = `// 用户登录接口（存在多处问题，用于演示）
+function login(username, password) {
+  // 拼接 SQL（注入漏洞）
+  const sql = "SELECT * FROM users WHERE user='" + username + "' AND pass='" + password + "'";
+  db.query(sql, (err, result) => {
+    if (result.length > 0) {
+      // 明文存储密码
+      localStorage.setItem("userPass", password);
+      console.log("登录成功，用户:", username, "密码:", password);
+    }
+  });
+}
+
+// 支付函数（逻辑 bug）
+function processPayment(amount) {
+  // 赋值而非比较
+  if (amount = 0) return true;
+  return chargeCard(amount);
+}
+
+// 冗余 await
+async function getData(url) { return await fetch(url); }`;
+
+// ─── State ──────────────────────────────────────────────────────────────────
+
+let running = false;
+let uploadedFiles = []; // { name, content }
+
+// ─── Routing ────────────────────────────────────────────────────────────────
+
+function navigate(page) {
+  // Update pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('page-' + page);
+  if (target) target.classList.add('active');
+
+  // Update nav links
+  document.querySelectorAll('.nav-link').forEach(l => {
+    l.classList.toggle('active', l.dataset.page === page);
+  });
+
+  // Update hash
+  history.replaceState(null, '', '#/' + (page === 'landing' ? '' : page));
+
+  // Load settings when entering settings page
+  if (page === 'settings') loadSettings();
+}
+
+function initRouter() {
+  const hash = location.hash.replace('#/', '');
+  navigate(hash || 'landing');
+}
+window.addEventListener('hashchange', () => {
+  const hash = location.hash.replace('#/', '');
+  navigate(hash || 'landing');
+});
+
+// ─── Health Check ───────────────────────────────────────────────────────────
+
+async function checkHealth() {
+  try {
+    const res = await fetch('/api/health');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const dot = document.getElementById('nav-dot');
+    const text = document.getElementById('nav-status-text');
+    if (data.apiKey === '已配置') {
+      dot.className = 'dot-sm ok';
+      text.textContent = (data.providerName || data.provider) + ' · 就绪';
+    } else {
+      dot.className = 'dot-sm err';
+      text.textContent = (data.providerName || '未配置') + ' · 无 Key';
+    }
+  } catch {
+    document.getElementById('nav-dot').className = 'dot-sm err';
+    document.getElementById('nav-status-text').textContent = '离线';
+  }
+}
+
+// ─── File Upload ────────────────────────────────────────────────────────────
+
+function initUpload() {
+  const zone = document.getElementById('upload-zone');
+  const input = document.getElementById('file-input');
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+  input.addEventListener('change', e => handleFiles(e.target.files));
+}
+
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    // Skip directories (they have size 0 and no extension in some browsers)
+    if (file.size === 0 && !file.name.includes('.')) continue;
+    // Skip binary files
+    if (file.type && !file.type.startsWith('text') && !file.type.includes('json') && !file.type.includes('javascript') && !file.type.includes('xml')) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['js','ts','jsx','tsx','py','rb','go','rs','java','c','cpp','h','hpp','cs','php','html','css','scss','sql','sh','bash','yaml','yml','toml','ini','cfg','conf','md','txt','json','xml','svg','env','gitignore','dockerfile'].includes(ext)) {
+        continue;
+      }
+    }
+
+    try {
+      const content = await readFileContent(file);
+      const path = file.webkitRelativePath || file.name;
+      uploadedFiles.push({ name: path, content });
+    } catch (err) {
+      console.warn('Failed to read file:', file.name, err);
+    }
+  }
+  renderFileList();
+  syncFilesToEditor();
+}
+
+function readFileContent(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function renderFileList() {
+  const el = document.getElementById('file-list');
+  el.innerHTML = '';
+  uploadedFiles.forEach((f, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    // Build safely with DOM APIs (no innerHTML for user-controlled data)
+    const icon = document.createElement('span');
+    icon.textContent = '📄';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = f.name;
+    const sizeSpan = document.createElement('span');
+    sizeSpan.style.cssText = 'color:var(--text-500);font-size:10px';
+    sizeSpan.textContent = Math.round(f.content.length / 1000) + 'KB';
+    chip.appendChild(icon);
+    chip.appendChild(nameSpan);
+    chip.appendChild(sizeSpan);
+    // Use IIFE to capture index (fix closure bug)
+    const btn = document.createElement('button');
+    btn.className = 'remove';
+    btn.textContent = '×';
+    const idx = i;
+    btn.onclick = (e) => { e.stopPropagation(); removeFile(idx); };
+    chip.appendChild(btn);
+    el.appendChild(chip);
+  });
+}
+
+function removeFile(index) {
+  uploadedFiles.splice(index, 1);
+  renderFileList();
+  syncFilesToEditor();
+}
+
+function syncFilesToEditor() {
+  const textarea = document.getElementById('code-input');
+  if (uploadedFiles.length === 0) {
+    // Don't clear manually typed code
+    return;
+  }
+  textarea.value = uploadedFiles.map(f => `// ─── File: ${f.name} ───\n${f.content}`).join('\n\n');
+}
+
+// ─── UI Helpers ─────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function loadSample() {
+  document.getElementById('code-input').value = SAMPLE_CODE;
+  uploadedFiles = [];
+  renderFileList();
+}
+
+function setAgent(id, state, text) {
+  const dot = document.getElementById('dot-' + id);
+  const card = document.getElementById('card-' + id);
+  const out = document.getElementById('out-' + id);
+  dot.className = 'status-dot ' + state;
+  card.className = 'agent-card' + (state === 'done' ? ' done' : state === 'thinking' ? ' active' : state === 'error' ? ' error' : '');
+  if (text !== undefined) {
+    out.className = state === 'error' ? 'agent-output error-text' : 'agent-output';
+    out.textContent = text;
+  }
+}
+
+// ─── Review Flow ────────────────────────────────────────────────────────────
+
+async function runReview() {
+  if (running) return;
+  const code = document.getElementById('code-input').value.trim();
+  if (!code) { alert('请输入代码、上传文件或点击「载入示例」'); return; }
+
+  running = true;
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('step-info').textContent = '三路 Agent 并行中...';
+
+  ['security', 'style', 'logic'].forEach(id => setAgent(id, 'thinking', '分析中...'));
+  document.getElementById('dot-orch').className = 'status-dot thinking';
+  const orchEl = document.getElementById('orch-content');
+  orchEl.innerHTML = '';
+  orchEl.appendChild(Object.assign(document.createElement('span'), { className: 'empty-hint', textContent: '等待三路 Agent 完成...' }));
+
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+      throw new Error(errData.error || '请求失败 (HTTP ' + res.status + ')');
+    }
+
+    const data = await res.json();
+    const failedAgents = data.failedAgents || [];
+
+    ['security', 'style', 'logic'].forEach(id => {
+      const result = data.agents?.[id];
+      if (result === null || result === undefined) {
+        setAgent(id, 'error', 'Agent 执行失败');
+      } else {
+        setAgent(id, 'done', result);
+      }
+    });
+
+    document.getElementById('step-info').textContent = '完成 ✓';
+    document.getElementById('dot-orch').className = data.orchestrator && !data.orchestrator.error ? 'status-dot done' : 'status-dot error';
+    renderOrchestrator(data.orchestrator);
+
+  } catch (err) {
+    document.getElementById('step-info').textContent = '请求失败: ' + err.message;
+    ['security', 'style', 'logic'].forEach(id => setAgent(id, 'error', '请求失败'));
+    document.getElementById('dot-orch').className = 'status-dot error';
+    const orchEl = document.getElementById('orch-content');
+    orchEl.innerHTML = '';
+    orchEl.appendChild(Object.assign(document.createElement('span'), { className: 'empty-hint error-text', textContent: err.message }));
+  }
+
+  running = false;
+  document.getElementById('run-btn').disabled = false;
+}
+
+// ─── Orchestrator Rendering (XSS-Safe) ──────────────────────────────────────
+
+function renderOrchestrator(report) {
+  const el = document.getElementById('orch-content');
+  el.innerHTML = '';
+
+  if (!report || report.error) {
+    el.appendChild(Object.assign(document.createElement('span'), { className: 'empty-hint error-text', textContent: report?.error || '解析失败' }));
+    return;
+  }
+
+  const sc = report.scores || {};
+  const issues = report.issues || [];
+  const sevMap = { high: 'HIGH', medium: 'MED', low: 'LOW' };
+  const agentIcon = { security: '🔒', style: '📐', logic: '🧠' };
+  const colorScore = n => n >= 8 ? '#22c55e' : n >= 5 ? '#f59e0b' : '#ef4444';
+  const labelMap = { security: '安全', style: '规范', logic: '逻辑' };
+
+  // Scores
+  const scoreRow = document.createElement('div');
+  scoreRow.className = 'score-row';
+  ['security', 'style', 'logic', 'overall'].forEach(key => {
+    const card = document.createElement('div');
+    card.className = 'score-card' + (key === 'overall' ? ' overall' : '');
+    const num = document.createElement('div');
+    num.className = 'score-num';
+    num.style.color = colorScore(sc[key]);
+    num.textContent = sc[key] ?? '-';
+    const lbl = document.createElement('div');
+    lbl.className = 'score-lbl';
+    lbl.textContent = key === 'overall' ? '综合' : (labelMap[key] || key);
+    card.appendChild(num);
+    card.appendChild(lbl);
+    scoreRow.appendChild(card);
+  });
+  el.appendChild(scoreRow);
+
+  // Issues
+  if (issues.length > 0) {
+    const title = document.createElement('div');
+    title.className = 'issues-title';
+    title.textContent = '发现问题 · ' + issues.length + ' 条';
+    el.appendChild(title);
+
+    issues.forEach(issue => {
+      const sev = ['high', 'medium', 'low'].includes(issue.sev) ? issue.sev : 'medium';
+      const item = document.createElement('div');
+      item.className = 'issue-item ' + sev;
+      const badge = document.createElement('span');
+      badge.className = 'sev-badge';
+      badge.textContent = sevMap[sev] || 'MED';
+      const text = document.createElement('span');
+      text.className = 'issue-text';
+      text.textContent = issue.text || '';
+      const tag = document.createElement('span');
+      tag.className = 'agent-tag';
+      tag.textContent = agentIcon[issue.agent] || '';
+      item.appendChild(badge);
+      item.appendChild(text);
+      item.appendChild(tag);
+      el.appendChild(item);
+    });
+  }
+
+  // Summary
+  if (report.summary) {
+    el.appendChild(Object.assign(document.createElement('div'), { className: 'divider' }));
+    el.appendChild(Object.assign(document.createElement('div'), { className: 'summary-box', textContent: report.summary }));
+  }
+
+  // Suggestion
+  if (report.suggestion) {
+    const box = document.createElement('div');
+    box.className = 'suggestion-box';
+    box.textContent = '💡 ' + report.suggestion;
+    el.appendChild(box);
+  }
+}
+
+// ─── Clear ──────────────────────────────────────────────────────────────────
+
+function clearAll() {
+  document.getElementById('code-input').value = '';
+  uploadedFiles = [];
+  renderFileList();
+  ['security', 'style', 'logic'].forEach(id => {
+    document.getElementById('dot-' + id).className = 'status-dot';
+    document.getElementById('card-' + id).className = 'agent-card';
+    const out = document.getElementById('out-' + id);
+    out.className = 'agent-output empty-hint';
+    out.textContent = '等待启动...';
+  });
+  document.getElementById('dot-orch').className = 'status-dot';
+  const orch = document.getElementById('orch-content');
+  orch.innerHTML = '';
+  orch.appendChild(Object.assign(document.createElement('span'), { className: 'empty-hint', textContent: '三路 Agent 完成后自动综合输出...' }));
+  document.getElementById('step-info').textContent = '';
+}
+
+// ─── Settings & Provider System ──────────────────────────────────────────────
+
+let providerPresets = {};
+let providerGroups = [];
+
+async function loadProviders() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providerPresets = data.presets;
+    providerGroups = data.groups;
+    populateProviderSelect();
+  } catch (err) {
+    console.error('Failed to load providers:', err);
+  }
+}
+
+function populateProviderSelect() {
+  const sel = document.getElementById('set-provider');
+  sel.innerHTML = '';
+
+  // Custom option
+  const customOpt = document.createElement('option');
+  customOpt.value = '_custom';
+  customOpt.textContent = '🛠 自定义配置';
+  sel.appendChild(customOpt);
+
+  // Grouped options
+  providerGroups.forEach(group => {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = group.label;
+    group.providers.forEach(pid => {
+      const preset = providerPresets[pid];
+      if (!preset) return;
+      const opt = document.createElement('option');
+      opt.value = pid;
+      opt.textContent = preset.name + (preset.region === 'cn' ? ' 🇨🇳' : ' 🌍');
+      optgroup.appendChild(opt);
+    });
+    if (optgroup.children.length > 0) sel.appendChild(optgroup);
+  });
+}
+
+function onProviderChange() {
+  const pid = document.getElementById('set-provider').value;
+  const preset = providerPresets[pid];
+
+  const modelSel = document.getElementById('set-model');
+  const baseUrlInput = document.getElementById('set-baseUrl');
+  const descEl = document.getElementById('provider-desc');
+  const keyDesc = document.getElementById('key-desc');
+  const keyHint = document.getElementById('key-hint');
+  const keyInput = document.getElementById('set-apiKey');
+
+  if (!preset) {
+    // Custom
+    modelSel.innerHTML = '<option value="">手动输入模型名</option>';
+    baseUrlInput.value = '';
+    baseUrlInput.readOnly = false;
+    descEl.textContent = '自定义 API 配置，需手动填写所有字段。';
+    keyDesc.textContent = '填写对应供应商的 API 密钥。';
+    keyHint.textContent = '自定义配置需手动填写';
+    keyInput.placeholder = 'your-api-key';
+    return;
+  }
+
+  // Auto-fill baseUrl
+  baseUrlInput.value = preset.baseUrl;
+
+  // Populate model select
+  modelSel.innerHTML = '';
+  preset.models.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    modelSel.appendChild(opt);
+  });
+
+  // Description
+  descEl.textContent = preset.description + (preset.note ? ' · ' + preset.note : '');
+
+  // Key hint based on format
+  if (preset.format === 'claude') {
+    keyInput.placeholder = 'sk-ant-api03-...';
+    keyDesc.textContent = 'Anthropic API 密钥，以 sk-ant- 开头。';
+    keyHint.innerHTML = '在 <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 获取。';
+  } else {
+    keyInput.placeholder = 'sk-...';
+    keyDesc.textContent = `${preset.name} 的 API 密钥。`;
+    keyHint.textContent = `格式：Bearer Token（${preset.format === 'openai' ? 'OpenAI 兼容' : '自定义'}）`;
+  }
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+
+    // Set provider
+    const providerSel = document.getElementById('set-provider');
+    if (data.provider && providerSel.querySelector(`option[value="${data.provider}"]`)) {
+      providerSel.value = data.provider;
+      onProviderChange();
+    }
+
+    // Set API key
+    document.getElementById('set-apiKey').value = data.apiKey || '';
+
+    // Set model
+    const modelSel = document.getElementById('set-model');
+    if (data.model) {
+      const opt = [...modelSel.options].find(o => o.value === data.model);
+      if (opt) {
+        modelSel.value = data.model;
+      } else {
+        const newOpt = document.createElement('option');
+        newOpt.value = data.model;
+        newOpt.textContent = data.model + ' (当前)';
+        modelSel.insertBefore(newOpt, modelSel.firstChild);
+        modelSel.value = data.model;
+      }
+    }
+
+    // Set base URL
+    if (data.baseUrl) document.getElementById('set-baseUrl').value = data.baseUrl;
+
+    // Set other fields
+    document.getElementById('set-maxTokens').value = data.maxTokens || '';
+    document.getElementById('set-timeout').value = data.apiTimeoutMs || '';
+
+  } catch {
+    setSettingsMsg('加载设置失败', 'err');
+  }
+}
+
+async function saveSettings() {
+  const provider = document.getElementById('set-provider').value;
+  const apiKey = document.getElementById('set-apiKey').value.trim();
+  const model = document.getElementById('set-model').value;
+  const baseUrl = document.getElementById('set-baseUrl').value.trim();
+  const maxTokens = document.getElementById('set-maxTokens').value.trim();
+  const apiTimeoutMs = document.getElementById('set-timeout').value.trim();
+
+  const payload = { provider, model, baseUrl, maxTokens, apiTimeoutMs };
+  if (apiKey && !apiKey.includes('...')) payload.apiKey = apiKey;
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    setSettingsMsg('✓ ' + (data.message || '保存成功'), 'ok');
+    checkHealth();
+  } catch (err) {
+    setSettingsMsg('✗ ' + err.message, 'err');
+  }
+}
+
+function setTestResult(container, status, detail) {
+  container.innerHTML = '';
+  const statusLine = document.createElement('div');
+  statusLine.style.cssText = 'font-weight:600;margin-bottom:6px';
+  statusLine.textContent = status;
+  container.appendChild(statusLine);
+  if (detail) {
+    const detailLine = document.createElement('div');
+    detailLine.style.cssText = 'color:var(--text-400);font-size:12px';
+    detailLine.textContent = detail;
+    container.appendChild(detailLine);
+  }
+}
+
+async function testConnection() {
+  const resultDiv = document.getElementById('test-result');
+  const content = document.getElementById('test-result-content');
+  resultDiv.style.display = 'block';
+  setTestResult(content, '⏳ 正在测试连接...');
+
+  const provider = document.getElementById('set-provider').value;
+  const apiKey = document.getElementById('set-apiKey').value.trim();
+  const model = document.getElementById('set-model').value;
+  const baseUrl = document.getElementById('set-baseUrl').value.trim();
+
+  if (!apiKey || apiKey.includes('...')) {
+    setTestResult(content, '✗ 请先填写 API Key');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/providers/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, apiKey, model, baseUrl }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setTestResult(content, '✓ 连接成功', '模型回复：' + (data.message || '').slice(0, 100));
+    } else {
+      setTestResult(content, '✗ 连接失败', data.error);
+    }
+  } catch (err) {
+    setTestResult(content, '✗ 请求失败', err.message);
+  }
+}
+
+function setSettingsMsg(text, type) {
+  const msg = document.getElementById('settings-msg');
+  msg.textContent = text;
+  msg.className = 'settings-msg ' + type;
+  setTimeout(() => { msg.textContent = ''; }, 4000);
+}
+
+function toggleKeyVis() {
+  const input = document.getElementById('set-apiKey');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+// ─── Init ───────────────────────────────────────────────────────────────────
+
+initRouter();
+checkHealth();
+initUpload();
+loadProviders();
+</script>
+</body>
+</html>
